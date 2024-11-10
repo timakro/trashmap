@@ -253,7 +253,7 @@ async fn update_map(
                 "ec_bindaddr \"127.0.0.1\"\n",
                 "ec_password \"open sesame\"\n",
                 "ec_output_level -3\n", // Prevent the TCP buffer running full
-                "sv_welcome \"Use rcon password \\\"test\\\" or /practice for testing\"\n",
+                "sv_motd \"Use rcon password \\\"test\\\" or /practice for testing. Instead of \\\"super\\\" use \\\"invincible\\\" to toggle invincibility.\"\n",
                 "sv_test_cmds 1\n",
                 "sv_rescue 1\n",
                 "sv_rcon_helper_password \"test\"\n",
