@@ -22,7 +22,7 @@ const autoUpdateMapInput = /** @type {HTMLInputElement} */ (document.getElementB
   localStorage.setItem('serverPassword', serverPassword);
   serverPasswordInput.value = serverPassword;
 
-  const autoUpdateMap = localStorage.getItem('autoUpdateMap') ?? 'true';
+  const autoUpdateMap = localStorage.getItem('autoUpdateMap') ?? 'false';
   localStorage.setItem('autoUpdateMap', autoUpdateMap);
   autoUpdateMapInput.checked = (autoUpdateMap === 'true');
 }
@@ -69,9 +69,20 @@ mapDropZone.addEventListener('dragover', (event) => {
   event.preventDefault();
 });
 // If available, use the File System Observer API to automatically update the map
-if ('FileSystemObserver' in self && 'getAsFileSystemHandle' in DataTransferItem.prototype && 'showOpenFilePicker' in window) {
+if ('FileSystemObserver' in self && 'getAsFileSystemHandle' in DataTransferItem.prototype) {
   // Reveal the checkbox and the enclosing label
   autoUpdateMapInput.parentElement.style.display = '';
+  // Disable the file picker because it restricts access to AppData on windows
+  function updateDropZoneText() {
+    if (autoUpdateMapInput.checked) {
+      mapDropZone.innerText = 'Drag a map file here';
+    } else {
+      mapDropZone.innerText = 'Drag a map here or click to upload a file';
+    }
+  }
+  updateDropZoneText();
+  autoUpdateMapInput.addEventListener('change', updateDropZoneText);
+  window.addEventListener('storage', updateDropZoneText);
   // @ts-ignore
   const fileSystemObserver = new FileSystemObserver(async (records) => {
     for (const record of records) {
@@ -87,7 +98,7 @@ if ('FileSystemObserver' in self && 'getAsFileSystemHandle' in DataTransferItem.
     const fileHandle = await event.dataTransfer.items[0].getAsFileSystemHandle();
     if (fileHandle instanceof FileSystemFileHandle) {
       pushMap(await fileHandle.getFile());
-      if (localStorage.getItem('autoUpdateMap') === 'true') {
+      if (autoUpdateMapInput.checked) {
         fileSystemObserver.disconnect();
         fileSystemObserver.observe(fileHandle);
         autoUpdateMapToast.style.display = '';
@@ -98,17 +109,16 @@ if ('FileSystemObserver' in self && 'getAsFileSystemHandle' in DataTransferItem.
     }
   });
   mapDropZone.addEventListener('click', async () => {
-    // @ts-ignore
-    const [fileHandle] = await window.showOpenFilePicker({ types: [{ accept: { 'application/octet-stream': ['.map'] } }] });
-    pushMap(await fileHandle.getFile());
-    if (localStorage.getItem('autoUpdateMap') === 'true') {
-      fileSystemObserver.disconnect();
-      fileSystemObserver.observe(fileHandle);
-      autoUpdateMapToast.style.display = '';
-    } else {
-      fileSystemObserver.disconnect();
-      autoUpdateMapToast.style.display = 'none';
+    if (!autoUpdateMapInput.checked) {
+      mapFileInput.click();
     }
+  });
+  mapFileInput.addEventListener('change', () => {
+    pushMap(mapFileInput.files[0]);
+    fileSystemObserver.disconnect();
+    autoUpdateMapToast.style.display = 'none';
+    // Trigger another change event when the same file is selected again
+    mapFileInput.value = null;
   });
   eventSource.addEventListener('stopped', () => {
     fileSystemObserver.disconnect();
