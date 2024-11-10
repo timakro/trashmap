@@ -1,0 +1,15 @@
+[package]
+name = "trashmap"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+axum = "0.7.5"
+directories = "5.0.1"
+serde = { version = "1.0.209", features = ["derive"] }
+tokio = { version = "1.40.0", features = ["full"] }
+tokio-stream = { version = "0.1.15", features = ["sync"] }
+toml = "0.8.19"
+tower-http = { version = "0.5.2", features = ["fs"] }
+uuid = { version = "1.10.0", features = ["serde"] }

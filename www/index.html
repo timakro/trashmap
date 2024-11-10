@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DDNet Trashmap</title>
+  <!-- Chrome origin trial for File System Observer API -->
+  <meta http-equiv="origin-trial" content="AoufRdR/Sr/6oJWDOaYaSnViFl+dhlNVSN7hTSpR1v5r4HWWZLCGiUgdg9q9QJ+hR8RumnO06mR0vxJOeze95A4AAABeeyJvcmlnaW4iOiJodHRwczovL3RyYXNobWFwLmRkbmV0Lm9yZzo0NDMiLCJmZWF0dXJlIjoiRmlsZVN5c3RlbU9ic2VydmVyIiwiZXhwaXJ5IjoxNzQ3MTgwNzk5fQ==">
+  <meta http-equiv="origin-trial" content="Ap260D9umZlAW/pzo+Zrk3jK3IVDRlXWKA72UjxIh21qjz9h0nGI8Ux4bcaKpLl2lrSVGrI1Yh72I6xt+4p02QMAAABVeyJvcmlnaW4iOiJodHRwOi8vMTI3LjAuMC4xOjMwMDAiLCJmZWF0dXJlIjoiRmlsZVN5c3RlbU9ic2VydmVyIiwiZXhwaXJ5IjoxNzQ3MTgwNzk5fQ==">
+  <script type="module" src="script.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    input:invalid {
+      background-color: lightsalmon;
+    }
+  </style>
+</head>
+
+<body style="font-family: sans-serif; line-height: 1.4; margin: 0 auto; max-width: 420px; padding: 10px; display: flex; flex-direction: column; gap: 10px;">
+  <div>
+    DDNet Trashmap lets you start a <a href="https://ddnet.org/">DDraceNetwork</a> server for testing your maps at a click of a button. The code is available <a href="https://github.com/timakro/trashmap">on GitHub</a>. A number of <a href="https://wiki.ddnet.org/wiki/DDNet_Trashmap#Public_instances">public instances</a> are hosted around the world by the community.
+  </div>
+
+  <label style="display: flex; flex-direction: column;">
+    Server name
+    <input type="text" id="server-name-input" required>
+  </label>
+
+  <label style="display: flex; flex-direction: column;">
+    Server password
+    <input type="password" id="server-password-input" required>
+  </label>
+
+  <div id="map-drop-zone" style="height: 200px; border: 2px dashed gray; display: flex; align-items: center; justify-content: center; padding: 0 10px;">
+    Drag a map here or click to upload a file
+  </div>
+  <input type="file" id="map-file-input" accept=".map" style="display: none;">
+
+  <label style="display: none;">
+    <input type="checkbox" id="auto-update-map-input">
+    Automatically update map when saving in editor
+  </label>
+
+  <div id="online-toast" style="background-color: lightgreen; border: 1px solid gray; border-radius: 10px; padding: 4px; display: none;"></div>
+  <div id="auto-update-map-toast" style="background-color: lightgreen; border: 1px solid gray; border-radius: 10px; padding: 4px; display: none;">
+    The map updates automatically until the tab closes.
+  </div>
+</body>
+
+</html>
