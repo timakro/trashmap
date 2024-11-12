@@ -1,4 +1,4 @@
-DDNet Trashmap lets you start a [DDraceNetwork](https://ddnet.org/) server for testing your maps at a click of a button. The name is inspired by TrashMail. A number of [public instances](https://wiki.ddnet.org/wiki/DDNet_Trashmap#Public_instances) are hosted around the world by the community.
+Trashmap lets you start a [DDraceNetwork](https://ddnet.org/) server for testing your maps at a click of a button. The name is inspired by TrashMail. A number of [public instances](https://wiki.ddnet.org/wiki/Trashmap#Public_instances) are hosted around the world by the community.
 
 ## Deployment
 
