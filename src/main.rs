@@ -303,7 +303,6 @@ async fn update_map(
         let mut child = Command::new(&state.config.executable_path)
             .current_dir(&server_path)
             .stdout(std::process::Stdio::piped())
-            .kill_on_drop(true) // Kill the process in case of an error
             .spawn()?;
         let stdout = child.stdout.take().unwrap();
 
