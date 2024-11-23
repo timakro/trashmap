@@ -34,7 +34,7 @@ struct AppState {
 }
 
 struct ServerProcess {
-    tcp_stream: tokio::net::TcpStream,
+    tcp_write: tokio::net::tcp::OwnedWriteHalf,
     server_path: PathBuf,
     map_path: PathBuf,
     port: u16,
@@ -47,16 +47,53 @@ struct ServerEvent {
     data: String,
 }
 
+fn default_timeout() -> u64 {
+    60
+}
+
 #[derive(Clone, Deserialize)]
 struct Config {
     http_port: u16,
     executable_path: PathBuf,
     port_range: (u16, u16),
     public_address: String,
+    #[serde(default = "default_timeout")]
+    timeout_seconds: u64,
+}
+
+impl ServerProcess {
+    fn new(tcp: tokio::net::TcpStream, server_path: PathBuf, map_path: PathBuf, port: u16) -> Self {
+        let (tcp_read, tcp_write) = tcp.into_split();
+
+        tokio::task::spawn(log_errors(async move {
+            let mut reader = tokio::io::BufReader::new(tcp_read).lines();
+            while let Some(line) = reader.next_line().await? {
+                log::debug!("{port} <- {line}");
+            }
+            log::debug!("{port}: tcp stream closed");
+            Ok(())
+        }));
+
+        Self {
+            tcp_write,
+            server_path,
+            map_path,
+            port,
+        }
+    }
+    async fn write(&mut self, buf: &str) -> tokio::io::Result<()> {
+        let port = self.port;
+        for line in buf.lines() {
+            log::debug!("{port} -> {line}");
+        }
+        self.tcp_write.write_all(buf.as_bytes()).await
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let project_dirs = ProjectDirs::from("org", "ddnet", "trashmap")
         .context("Could not determine the user's home directory")?;
     let config_path = project_dirs.config_dir().join("config.toml");
@@ -106,7 +143,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let mut processes = state.processes.lock().await;
         for process in processes.values_mut() {
-            process.tcp_stream.write_all(b"shutdown\n").await?;
+            process.write("shutdown\n").await?;
 
             tokio::fs::remove_dir_all(&process.server_path).await?;
         }
@@ -115,7 +152,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }));
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", config.http_port)).await?;
-    println!("Listening on http://{}", listener.local_addr()?);
+    log::info!("Listening on http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -155,7 +192,12 @@ async fn server_events(
 }
 
 fn escape_ddnet(str: &str) -> String {
-    str.replace(r"\", r"\\").replace("\"", "\\\"")
+    str
+        .replace(r"\", r"\\")
+        .replace("\"", "\\\"")
+        .replace("\n", " ")
+        .replace("#", "")
+        .replace(";", "")
 }
 
 #[derive(Deserialize)]
@@ -169,17 +211,21 @@ async fn update_settings(
     State(state): State<AppState>,
     Query(query): Query<UpdateSettingsQuery>,
 ) -> Result<StatusCode, AppError> {
+    log::debug!(
+        "update settings: id={}, name={}, pwd={}",
+        query.server_id,
+        query.server_name,
+        query.server_password
+    );
     let mut processes = state.processes.lock().await;
     if let Some(process) = processes.get_mut(&query.server_id) {
         process
-            .tcp_stream
-            .write_all(
-                [
+            .write(
+                &[
                     format!("sv_name \"{}\"\n", escape_ddnet(&query.server_name)),
                     format!("password \"{}\"\n", escape_ddnet(&query.server_password)),
                 ]
-                .concat()
-                .as_bytes(),
+                .concat(),
             )
             .await?;
         Ok(StatusCode::ACCEPTED)
@@ -201,6 +247,13 @@ async fn update_map(
     Query(query): Query<UpdateMapQuery>,
     map_bytes: Bytes,
 ) -> Result<StatusCode, AppError> {
+    log::debug!(
+        "update map: id={}, map={}, name={}, pwd={}",
+        query.server_id,
+        query.map_filename,
+        query.server_name,
+        query.server_password
+    );
     let map_filename = Path::new(&query.map_filename)
         .file_name()
         .context("Not a valid filename")?
@@ -220,11 +273,10 @@ async fn update_map(
         tokio::fs::write(&map_path, map_bytes).await?;
 
         if process.map_path == map_path {
-            process.tcp_stream.write_all(b"hot_reload\n").await?;
+            process.write("hot_reload\n").await?;
         } else {
             process
-                .tcp_stream
-                .write_all(format!("change_map \"{}\"\n", escape_ddnet(map_name)).as_bytes())
+                .write(&format!("change_map \"{}\"\n", escape_ddnet(map_name)))
                 .await?;
             tokio::fs::remove_file(&process.map_path).await?;
             process.map_path = map_path;
@@ -250,7 +302,7 @@ async fn update_map(
                 &format!("sv_name \"{}\"\n", escape_ddnet(&query.server_name)),
                 &format!("password \"{}\"\n", escape_ddnet(&query.server_password)),
                 &format!("ec_port {port}\n"),
-                "ec_bindaddr \"127.0.0.1\"\n",
+                "ec_bindaddr \"localhost\"\n",
                 "ec_password \"open sesame\"\n",
                 "ec_output_level -3\n", // Prevent the TCP buffer running full
                 "sv_motd \"Use rcon password \\\"test\\\" or /practice for testing. Instead of \\\"super\\\" use \\\"invincible\\\" to toggle invincibility.\"\n",
@@ -331,24 +383,19 @@ async fn update_map(
             let line = tokio::time::timeout_at(deadline, lines.next_line())
                 .await??
                 .context("The server process stopped unexpectedly")?;
-            if line.contains("econ: bound to 127.0.0.1") {
+            log::debug!("{line}");
+            if line.contains("econ: bound to localhost") {
                 break;
             }
         }
 
-        let mut tcp_stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
-
+        let mut tcp_stream = tokio::net::TcpStream::connect(("localhost", port)).await?;
         tcp_stream.write_all(b"open sesame\n").await?;
-        tcp_stream.write_all(b"stdout_output_level -3\n").await?; // Prevent the pipe running full
+        log::debug!("{port}: tcp stream opened");
 
         processes.insert(
             query.server_id,
-            ServerProcess {
-                tcp_stream,
-                server_path,
-                map_path,
-                port,
-            },
+            ServerProcess::new(tcp_stream, server_path, map_path, port),
         );
 
         let _ = state.event_channel.send(ServerEvent {
@@ -359,14 +406,14 @@ async fn update_map(
 
         let state_clone = state.clone();
         tokio::task::spawn(log_errors(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                state.config.timeout_seconds,
+            ))
+            .await;
 
             let mut processes = state_clone.processes.lock().await;
             if let Some(process) = processes.get_mut(&query.server_id) {
-                process
-                    .tcp_stream
-                    .write_all(b"sv_shutdown_when_empty 1\n")
-                    .await?;
+                process.write("sv_shutdown_when_empty 1\n").await?;
 
                 let _ = state_clone.event_channel.send(ServerEvent {
                     server_id: query.server_id,
@@ -384,7 +431,7 @@ async fn update_map(
 
 async fn log_errors(future: impl std::future::Future<Output = Result<(), anyhow::Error>>) {
     if let Err(error) = future.await {
-        eprintln!("Error in task: {error:?}");
+        log::error!("Error in task: {error:?}");
     }
 }
 
@@ -392,7 +439,7 @@ struct AppError(anyhow::Error);
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        eprintln!("Error in handler: {:?}", self.0);
+        log::error!("Error in handler: {:?}", self.0);
         (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()).into_response()
     }
 }
