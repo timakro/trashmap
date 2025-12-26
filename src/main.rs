@@ -155,7 +155,7 @@ async fn server_events(
 }
 
 fn escape_ddnet(str: &str) -> String {
-    str.replace(r"\", r"\\").replace("\"", "\\\"")
+    str.replace(r"\", r"\\").replace("\"", "\\\"").replace("\n", "").replace("\r", "")
 }
 
 #[derive(Deserialize)]
